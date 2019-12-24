@@ -1,0 +1,3 @@
+[submodule "Decider"]
+	path = Decider
+	url = https://github.com/lifebeyondfife/Decider.git
