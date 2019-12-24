@@ -13,7 +13,7 @@ public class WFC : MonoBehaviour
 	public int SlotSize = 1;
 
 	public GameObject debug_spawner;
-
+	public GameObject debug_spawner_2;
 
 
 	public List<WFCPrototype> prototypes;
@@ -42,31 +42,15 @@ public class WFC : MonoBehaviour
 		prototypes = new List<WFCPrototype>();
 		prototypes.Add(new WFCPrototype(0));
 		prototypes.Add(new WFCPrototype(1));
-		ConstrainedArray[,,,] directionGrid = new ConstrainedArray[Size.x, Size.y, Size.z, 6];
+
 		VariableInteger[,,] slotGrid = new VariableInteger[Size.x, Size.y, Size.z];
-		//VariableInteger[,,,] selector = new VariableInteger[Size.x, Size.y, Size.z, 6];
 
 		ConstrainedArray protoypeVariables = new ConstrainedArray(prototypes.Select(x => x.Id));
-		VariableInteger[,] protoypeDirectionSelectors = new VariableInteger[prototypes.Count, 6];
-		VariableInteger[,] prototypeDirectionVariables = new VariableInteger[prototypes.Count, 6];
+		VariableInteger[,,,] protoypeDirectionSelectors = new VariableInteger[Size.x, Size.y, Size.z, 6];
+		ConstrainedArray2D[] prototypeDirectionVariables = new ConstrainedArray2D[6];
 
 		List<IVariable<int>> variables = new List<IVariable<int>>();
 		List<ConstraintInteger> constraints = new List<ConstraintInteger>();
-
-		// Initialize prototype variabvles
-		for (int i = 0; i < prototypes.Count; i++)
-		{
-			foreach (int direction in SlotDirection.Directions)
-			{
-				var possibleIds = prototypes[i].GetPossible(direction);
-				protoypeDirectionSelectors[i, direction] = new VariableInteger($"s_{i}_{direction}", possibleIds);
-				prototypeDirectionVariables[i, direction] = new VariableInteger($"d_{i}_{direction}", possibleIds);
-
-				variables.Add(protoypeDirectionSelectors[i, direction]);
-				variables.Add(prototypeDirectionVariables[i, direction]);
-			}
-		}
-
 
 		// Every slot should get some prototype assigned
 		for (int x = 0; x < Size.x; x++)
@@ -76,10 +60,40 @@ public class WFC : MonoBehaviour
 				for (int z = 0; z < Size.z; z++)
 				{
 					slotGrid[x, y, z] = new VariableInteger($"{x},{y},{z}", prototypes.Select(a => a.Id).ToList());
-					variables.Add(slotGrid[x, y, z]);					
+					variables.Add(slotGrid[x, y, z]);
+
+					foreach (int direction in SlotDirection.Directions)
+					{
+						protoypeDirectionSelectors[x, y, z, direction] = new VariableInteger($"s_{x}{y}{z}_{direction}", 0, prototypes.Count);
+						variables.Add(protoypeDirectionSelectors[x, y, z, direction]);
+					}
 				}
 			}
 		}
+
+		// Initialize prototype variabvles
+		foreach (int direction in SlotDirection.Directions)
+		{
+			List<int[]> p = new List<int[]>();
+			for (int i = 0; i < prototypes.Count; i++)
+			{
+				p.Add(prototypes[i].GetPossible(direction));
+			}
+			prototypeDirectionVariables[direction] = new ConstrainedArray2D(p);
+		}
+
+
+
+
+		var directions = new (int, int, int, int, int)[]
+		{
+			(0,1,0, SlotDirection.UP, SlotDirection.DOWN),
+			(0,-1,0, SlotDirection.DOWN, SlotDirection.UP),
+			(-1,0,0, SlotDirection.LEFT, SlotDirection.RIGHT),
+			(1,0,0, SlotDirection.RIGHT, SlotDirection.LEFT),
+			(0,0,1, SlotDirection.FORWARD, SlotDirection.BACK),
+			(0,0,-1, SlotDirection.BACK, SlotDirection.FORWARD),
+		};
 
 		// Neighbour constraints.		
 		for (int x = 1; x < Size.x - 1; x++)
@@ -88,41 +102,30 @@ public class WFC : MonoBehaviour
 			{
 				for (int z = 1; z < Size.z - 1; z++)
 				{
-					// Every slot contains a int
-					/*var directedUp = directionGrid[x, y + 1, z, SlotDirection.DOWN];
-					var directedDown = directionGrid[x, y - 1, z, SlotDirection.UP];
-					var up = slotGrid[x, y + 1, z];
-					var down = slotGrid[x, y - 1, z];
+					// Slot a contains a int that decides the prototype:
 
-					var directedLeft = directionGrid[x - 1, y, z, SlotDirection.RIGHT];
-					var directedRight = directionGrid[x + 1, y, z, SlotDirection.LEFT];
-					var left = slotGrid[x - 1, y, z];
-					var right = slotGrid[x + 1, y, z];
-
-					var directedForward = directionGrid[x, y, z + 1, SlotDirection.BACK];
-					var directedBack = directionGrid[x, y, z - 1, SlotDirection.FORWARD];
-					var forward = slotGrid[x, y, z + 1];
-					var back = slotGrid[x, y, z - 1];*/
+					// the left of protoype a should contain b
+					// the right of prototype b should contain a
+					// aka. ∃x1 | D[b,right,x1] = a
+					// aka. ∃x2 | D[a,left,x2] = b
 
 					var currentSlot = slotGrid[x, y, z];
 
-					// slots are equal or something.
+					foreach (var (dx, dy, dz, direction, otherDirection) in directions)
+					{
+						var nextSlot = slotGrid[x + dx, y + dy, z + dz];
 
-					/*constraints.Add(new ConstraintInteger(directedUp[selector[x, y + 1, z, SlotDirection.DOWN]] == slotGrid[x, y, z]));
-					constraints.Add(new ConstraintInteger(directedDown[selector[x, y - 1, z, SlotDirection.UP]] == slotGrid[x, y, z]));
-					constraints.Add(new ConstraintInteger(directedLeft[selector[x - 1, y, z, SlotDirection.RIGHT]] == slotGrid[x, y, z]));
-					constraints.Add(new ConstraintInteger(directedRight[selector[x + 1, y, z, SlotDirection.LEFT]] == slotGrid[x, y, z]));
-					constraints.Add(new ConstraintInteger(directedBack[selector[x, y, z - 1, SlotDirection.FORWARD]] == slotGrid[x, y, z]));
-					constraints.Add(new ConstraintInteger(directedForward[selector[x, y, z + 1, SlotDirection.BACK]] == slotGrid[x, y, z]));
+						//var selector1 = protoypeDirectionSelectors[x, y, z, direction];
+						var d1 = prototypeDirectionVariables[direction][currentSlot];
 
-					constraints.Add(new ConstraintInteger(directionGrid[x, y, z, SlotDirection.UP][selector[x, y, z, SlotDirection.UP]] == up));
-					constraints.Add(new ConstraintInteger(directionGrid[x, y, z, SlotDirection.DOWN][selector[x, y, z, SlotDirection.DOWN]] == down));
 
-					constraints.Add(new ConstraintInteger(directionGrid[x, y, z, SlotDirection.LEFT][selector[x, y, z, SlotDirection.LEFT]] == left));
-					constraints.Add(new ConstraintInteger(directionGrid[x, y, z, SlotDirection.RIGHT][selector[x, y, z, SlotDirection.RIGHT]] == right));
+						constraints.Add(new ConstraintInteger(d1 == nextSlot));
 
-					constraints.Add(new ConstraintInteger(directionGrid[x, y, z, SlotDirection.FORWARD][selector[x, y, z, SlotDirection.FORWARD]] == forward));
-					constraints.Add(new ConstraintInteger(directionGrid[x, y, z, SlotDirection.BACK][selector[x, y, z, SlotDirection.BACK]] == back));*/
+						//var selector2 = protoypeDirectionSelectors[x + dx, y + dy, z + dz, otherDirection];
+						var d2 = prototypeDirectionVariables[direction][nextSlot];
+						constraints.Add(new ConstraintInteger(d2 == currentSlot));
+
+					}
 				}
 			}
 		}
@@ -130,7 +133,7 @@ public class WFC : MonoBehaviour
 
 		IState<int> state = new StateInteger(variables, constraints);
 
-	
+
 
 		state.StartSearch(out StateOperationResult result);
 
@@ -141,11 +144,19 @@ public class WFC : MonoBehaviour
 				for (int y = 0; y < Size.y; y++)
 				{
 					for (int z = 0; z < Size.z; z++)
-					{						
+					{
 						var value = slotGrid[x, y, z];
 						var veci = new Vector3Int(x, y, z);
-						var o = Instantiate(debug_spawner, veci, Quaternion.identity, transform);
-						o.name = $"spawn_{x}_{y}_{z}_{value}";						
+						if (value.Value == 0)
+						{
+							var o = Instantiate(debug_spawner, veci, Quaternion.identity, transform);
+							o.name = $"spawn_{x}_{y}_{z}_{value}";
+							//Debug.Log($"{value} but {value.Integer} or {value.Value}");
+						} else
+						{
+							var o = Instantiate(debug_spawner_2, veci, Quaternion.identity, transform);
+							o.name = $"spawn_{x}_{y}_{z}_{value}";
+						}
 					}
 				}
 			}

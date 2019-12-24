@@ -28,12 +28,18 @@ namespace Decider.Csp.BaseTypes
 			this.AddRange(elements);
 		}
 
+		public ConstrainedArray(IEnumerable<int> elements, VariableInteger index)
+		{
+			this.Index = index;
+			this.AddRange(elements);
+		}
+
 		private VariableInteger GetVariableInteger()
 		{
 			return new VariableInteger(Index.Name + this.ToString(), Elements());
 		}
 
-		private List<int> Elements()
+		public List<int> Elements()
 		{
 			return Enumerable.Range(Index.Domain.LowerBound, Index.Domain.UpperBound - Index.Domain.LowerBound + 1).
 				Where(i => Index.Domain.Contains(i)).
@@ -60,7 +66,7 @@ namespace Decider.Csp.BaseTypes
 			return sortedList;
 		}
 
-		private int Evaluate(ExpressionInteger left, ExpressionInteger right)
+		public int Evaluate(ExpressionInteger left, ExpressionInteger right)
 		{
 			return this[Index.Value];
 		}
@@ -72,7 +78,7 @@ namespace Decider.Csp.BaseTypes
 			return new Bounds<int>(elements.Min(), elements.Max());
 		}
 
-		private ConstraintOperationResult Propagator(ExpressionInteger left, ExpressionInteger right, Bounds<int> enforce)
+		public ConstraintOperationResult Propagator(ExpressionInteger left, ExpressionInteger right, Bounds<int> enforce)
 		{
 			var result = ConstraintOperationResult.Undecided;
 

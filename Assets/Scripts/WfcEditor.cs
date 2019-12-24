@@ -19,7 +19,8 @@ public class WFCEditor : Editor
 
 
 		GUILayout.Label("Debug item");
-		wfc.debug_spawner = (GameObject)EditorGUILayout.ObjectField("es", wfc.debug_spawner, typeof(GameObject), true);
+		wfc.debug_spawner = (GameObject)EditorGUILayout.ObjectField("ds2", wfc.debug_spawner, typeof(GameObject), true);
+		wfc.debug_spawner_2 = (GameObject)EditorGUILayout.ObjectField("ds1", wfc.debug_spawner_2, typeof(GameObject), true);
 
 		if (GUILayout.Button("Generate map"))
 		{

@@ -23,6 +23,8 @@ namespace Decider.Csp.Integer
 
 		private IVariable<int>[] LastSolution { get; set; }
 
+		private Random random;
+
 		public StateInteger(IEnumerable<IVariable<int>> variables, IEnumerable<IConstraint> constraints)
 		{
 			((IState<int>) this).SetVariables(variables);
@@ -30,6 +32,12 @@ namespace Decider.Csp.Integer
 			this.Depth = 0;
 			this.Backtracks = 0;
 			this.Runtime = new TimeSpan(0);
+			this.random = new Random();
+		}
+
+		public void SetSeed(int seed)
+		{
+			this.random = new Random(seed);
 		}
 
 		void IState<int>.SetVariables(IEnumerable<IVariable<int>> variableList)
@@ -182,7 +190,8 @@ namespace Decider.Csp.Integer
 					return;
 				}
 
-				instantiatedVariables[this.Depth] = GetMostConstrainedVariable(unassignedVariables);
+
+				instantiatedVariables[this.Depth] = GetMostConstrainedVariable(unassignedVariables, this.random);
 				instantiatedVariables[this.Depth].Instantiate(this.Depth, out DomainOperationResult instantiateResult);
 
 				if (ConstraintsViolated() || unassignedVariables.Any(v => v.Size() == 0))
@@ -238,21 +247,37 @@ namespace Decider.Csp.Integer
 			variablePrune.Remove(value, this.Depth, out result);
 		}
 
-		private static IVariable<int> GetMostConstrainedVariable(LinkedList<IVariable<int>> list)
+		private static IVariable<int> GetMostConstrainedVariable(LinkedList<IVariable<int>> list, Random random)
 		{
 			var temp = list.First;
 			var node = list.First;
 
+			List<LinkedListNode<IVariable<int>>> sames = new List<LinkedListNode<IVariable<int>>>();
+			sames.Add(node);
 			while (node != null)
 			{
-				if (node.Value.Size() < temp.Value.Size())
+				var ns = node.Value.Size();
+				var ts = temp.Value.Size();
+				if (ns < ts)
+				{
 					temp = node;
+					sames = new List<LinkedListNode<IVariable<int>>>();
+					sames.Add(node);
+				}
 
 				if (temp.Value.Size() == 1)
 					break;
 
+
+				if (ns == ts)
+				{
+					sames.Add(node);
+				}
+
+				
 				node = node.Next;
 			}
+			temp = sames[random.Next(0, sames.Count)];
 			list.Remove(temp);
 
 			return temp.Value;
