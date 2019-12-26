@@ -5,17 +5,36 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
+public struct Domain
+{
+    public int Depth;
+    public HashSet<int> Range;
 
+    public Domain(Domain d)
+    {
+        this.Depth = d.Depth;
+        this.Range = new HashSet<int>(d.Range);
+    }
+
+    public Domain(int depth, HashSet<int> range)
+    {
+        this.Depth = depth;
+        this.Range = range;
+    }
+}
 public class Slot
 {
-    public int DomainSize => DomainStack.Peek().Count;
-    public bool IsInstantiated => DomainSize == 1;
+    public Domain Domain => DomainStack.Peek();
+    public int DomainSize => Domain.Range.Count;
+    public bool IsInstantiated => Domain.Range.Count == 1;
+
+    private Stack<Domain> DomainStack;
     public int Value
     {
         get
         {
             if (IsInstantiated)
-                return DomainStack.Peek().First();
+                return Domain.Range.First();
 
             throw new ArgumentException("Tried to take value whilst not instantiated");
         }
@@ -23,11 +42,10 @@ public class Slot
 
     public List<Slot>[] Neighbours { get; }
 
-    private Stack<HashSet<int>> DomainStack;
     public Slot(IEnumerable<int> possibleProtoTypes)
     {
-        this.DomainStack = new Stack<HashSet<int>>();
-        this.DomainStack.Push(new HashSet<int>(possibleProtoTypes));
+        this.DomainStack = new Stack<Domain>();
+        this.DomainStack.Push(new Domain(-1, new HashSet<int>(possibleProtoTypes)));
         this.Neighbours = new List<Slot>[6] {
             new List<Slot>(),
             new List<Slot>(),
@@ -38,48 +56,59 @@ public class Slot
         };
     }
 
-    internal void Intantiate(Random random)
+    internal void Instantiate(int depth, Random random)
     {
-        if (IsInstantiated)
+        if (!IsInstantiated)
         {
-            throw new ArgumentException("Tried to instantiate whilst already instantiated");
+            var oldDomain = new List<int>(this.Domain.Range);
+            var newDomain = new Domain(depth, new HashSet<int>(new[] { oldDomain[random.Next(0, oldDomain.Count)] }));
+
+            this.DomainStack.Push(newDomain);
         }
-
-        var oldDomain = new List<int>(this.DomainStack.Peek());
-        var newDomain = new HashSet<int>();
-        newDomain.Add(oldDomain[random.Next(0, oldDomain.Count)]);
-
-        this.DomainStack.Push(newDomain);
     }
 
-    public PropagationState LessenDomain(HashSet<int> possibles)
+    public PropagationState LessenDomain(int depth, HashSet<int> possibles)
     {
-        var domain = this.DomainStack.Peek();
-        HashSet<int> lessened = new HashSet<int>(possibles.Intersect(domain));
-        if (lessened.Count < domain.Count)
+
+        if (Domain.Depth == depth)
         {
-            if (lessened.Count == 0)
+            int oldCount = Domain.Range.Count;
+            Domain.Range.IntersectWith(possibles);
+            if (Domain.Range.Count == 0)
             {
                 return PropagationState.Violated;
             }
+            if (oldCount == Domain.Range.Count)
+            {
+                return PropagationState.Unchanged;
+            }
             else
             {
-                this.DomainStack.Push(lessened);
-                if (lessened.Count == 1)
-                {
-                    return PropagationState.Instantiated;
-                } else
-                {
-                    return PropagationState.Propagated;
-                }
+                return PropagationState.Propagated;
             }
         }
-        return PropagationState.Unchanged;
+        HashSet<int> lessened = new HashSet<int>(possibles.Intersect(Domain.Range));
+        if (lessened.Count == 0)
+        {
+            return PropagationState.Violated;
+        }
+
+        if (lessened.Count == Domain.Range.Count)
+        {
+            return PropagationState.Unchanged;
+        }
+        Domain next = new Domain(depth, lessened);
+        DomainStack.Push(next);
+        return PropagationState.Propagated;
     }
 
-    public void Backtrack()
+    public void Backtrack(int depth)
     {
-        this.DomainStack.Pop();
+        // remove the domain of everything deeper than depth
+        while (DomainStack.Peek().Depth >= depth)
+        {
+            DomainStack.Pop();
+        }
     }
 
     public void AddNeighbour(int dir, Slot slot)
@@ -91,7 +120,7 @@ public class Slot
     {
         HashSet<int> possible = new HashSet<int>();
 
-        foreach (int index in this.DomainStack.Peek())
+        foreach (int index in this.DomainStack.Peek().Range)
         {
             possible.UnionWith(prototypes[index].GetPossible(direction));
         }
@@ -99,10 +128,22 @@ public class Slot
         return possible;
     }
 
-    public void RemoveCandidate(int wrong)
+    public DomainOperationResult RemoveCandidate(int depth, int wrong)
     {
-        var set = new HashSet<int>(this.DomainStack.Peek());
-        set.Remove(wrong);
-        this.DomainStack.Push(set);
+        if (Domain.Depth == depth)
+        {
+            Domain.Range.Remove(wrong);
+        }
+        else
+        {
+            Domain clone = new Domain(this.Domain);
+            clone.Depth = depth;
+            clone.Range.Remove(wrong);
+            DomainStack.Push(clone);
+        }
+
+        return (Domain.Range.Count == 0) ?
+            DomainOperationResult.EmptyDomain :
+            DomainOperationResult.FilledDomain;
     }
 }

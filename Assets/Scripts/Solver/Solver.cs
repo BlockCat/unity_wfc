@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 using Random = System.Random;
@@ -13,15 +14,25 @@ namespace Assets.Scripts.Solver
     {
         private Random random;
         private Slot[,,] grid;
-        private List<Slot> slots = new List<Slot>();
         private List<WFCPrototype> prototypes;
+
+        private int Depth = 0;
+        private List<Slot> unassignedSlots;
+        private Stack<Slot> instantiatedSlots;
+
+        public int Backtracks { get; private set; }
+
+        public event EventHandler<CompletedEventArgs> Completed;
+        public event EventHandler<int> Failed;
 
         public Solver(Slot[,,] grid, List<WFCPrototype> prototypes)
         {
-            this.slots = new List<Slot>(grid.Cast<Slot>());
             this.grid = grid;
             this.random = new Random();
             this.prototypes = prototypes;
+
+            this.unassignedSlots = new List<Slot>(grid.Cast<Slot>());
+            this.instantiatedSlots = new Stack<Slot>();
 
             InitializeGrid(grid);
         }
@@ -62,48 +73,89 @@ namespace Assets.Scripts.Solver
             }
         }
 
-        public Slot[,,] Solve()
+        public void Solve()
         {
-            List<List<Slot>> history = new List<List<Slot>>();
-            do
+
+            while (true)
             {
-                Slot candidate = FindSmallestDomain();
-                candidate.Intantiate(random);
-                var result = Propagate(candidate, out var changeSet);
-
-                if (result == PropagationState.Propagated)
+                if (this.unassignedSlots.Count == 0)
                 {
-                    history.Add(changeSet);
-                }
-                else if (result == PropagationState.Violated)
-                {
-
-                    throw new NotImplementedException("Violation is not accepted");
-
-                    int wrong = candidate.Value;
-                    foreach (var x in changeSet)
+                    this.Completed?.Invoke(this, new CompletedEventArgs
                     {
-                        x.Backtrack();
-                    }
-                    candidate.RemoveCandidate(wrong);
+                        Grid = this.grid,
+                        Backtracks = this.Backtracks
 
-                    Propagate(candidate, out changeSet);
+                    }); ;
+                    return;
                 }
-                else
+
+                var smallestDomain = FindSmallestDomain();
+
+                instantiatedSlots.Push(smallestDomain);
+                unassignedSlots.Remove(smallestDomain);
+                instantiatedSlots.Peek().Instantiate(this.Depth, random);
+
+                if (ConstraintsViolated(instantiatedSlots.Peek()) || unassignedSlots.Any(x => x.DomainSize == 0))
                 {
-                    throw new Exception("Unreachable state");
+                    if (Backtrack(unassignedSlots, instantiatedSlots) == PropagationState.Violated)
+                    {
+                        this.Failed?.Invoke(this, Backtracks);
+                    }
                 }
-                // now propagate
-            } while (!Check());
 
-            return grid;
+                ++Depth;
+            }
         }
 
-        private bool Check() => this.slots.All(x => x.IsInstantiated);
+        private PropagationState Backtrack(List<Slot> unassignedSlots, Stack<Slot> instantiatedSlots)
+        {
+            DomainOperationResult result;
+            do
+            {
+                if (this.Depth < 0)
+                {
+                    return PropagationState.Violated;
+                }
+                var unassign = instantiatedSlots.Pop();
+                unassignedSlots.Insert(0, unassign);
+                result = BacktrackVariable(unassign);
+            } while (result == DomainOperationResult.EmptyDomain);
+            return PropagationState.Propagated;
+        }
+
+        private DomainOperationResult BacktrackVariable(Slot unassign)
+        {
+            ++this.Backtracks;
+            var v = unassign.Value;
+
+            foreach (var s in instantiatedSlots)
+            {
+                s.Backtrack(this.Depth);
+            }
+            foreach (var s in unassignedSlots)
+            {
+                s.Backtrack(this.Depth);
+            }
+
+            --this.Depth;
+
+            return unassign.RemoveCandidate(this.Depth, v);
+        }
+
+        private bool ConstraintsViolated(Slot changed)
+        {
+            var state = Propagate(changed, out var _);
+            if (state == PropagationState.Violated)
+            {
+                return true;
+            }
+
+            return false;
+        }
         private Slot FindSmallestDomain()
         {
-            Slot temp = slots.First(x => !x.IsInstantiated);
-            foreach (var x in this.slots.Where(x => !x.IsInstantiated))
+            Slot temp = unassignedSlots.First();
+            foreach (var x in this.unassignedSlots)
             {
                 if (x.DomainSize < temp.DomainSize)
                 {
@@ -130,7 +182,7 @@ namespace Assets.Scripts.Solver
                 {
                     foreach (var neighbour in node.Neighbours[direction].Where(n => !n.IsInstantiated))
                     {
-                        var result = neighbour.LessenDomain(node.GetPossible(direction, prototypes));
+                        var result = neighbour.LessenDomain(this.Depth, node.GetPossible(direction, prototypes));
                         if (result == PropagationState.Propagated || result == PropagationState.Instantiated)
                         {
                             stack.Push(neighbour);
@@ -149,8 +201,22 @@ namespace Assets.Scripts.Solver
         }
     }
 
+
+
     public enum PropagationState
     {
         Propagated, Instantiated, Violated, Unchanged
+    }
+
+    public enum DomainOperationResult
+    {
+        EmptyDomain,
+        FilledDomain
+    }
+
+    public struct CompletedEventArgs
+    {
+        public Slot[,,] Grid;
+        public int Backtracks;
     }
 }
