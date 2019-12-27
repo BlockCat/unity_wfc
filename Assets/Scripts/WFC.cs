@@ -1,9 +1,11 @@
 ﻿using Assets.Scripts.Solver;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class WFC : MonoBehaviour
 {
@@ -22,9 +24,11 @@ public class WFC : MonoBehaviour
     public List<WFCPrototype> prototypes;
 
     private Slot[,,] grid;
-    
+
+    public GameObject SceneLoader { get; internal set; }
+
     public void ClearChildren()
-    {
+    {                
         for (int i = transform.childCount - 1; i >= 0; --i)
         {
             DestroyImmediate(transform.GetChild(i).gameObject);
@@ -34,8 +38,8 @@ public class WFC : MonoBehaviour
     {
 
         prototypes = new List<WFCPrototype>();
-        prototypes.Add(new WFCPrototype(0));
-        prototypes.Add(new WFCPrototype(1));
+        prototypes.Add(new WFCPrototype(0, null));
+        prototypes.Add(new WFCPrototype(1, null));
 
         //prototypes.Add(new WFCPrototype(2));
 
