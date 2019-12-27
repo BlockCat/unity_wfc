@@ -19,22 +19,15 @@ public class WFCPrototype
         this.Id = id;
         this.Schema = schema;
         this.Rotation = rotation;
-        foreach (var direction in SlotDirection.Directions)
-        {
-            if (direction == SlotDirection.UP || direction == SlotDirection.DOWN)
-            {
-            }
-            else
-            {
-                Possible[direction] = new int[] { Id };
-            }
-                Possible[direction] = new int[] { (Id + 1) % 2 };
-            //Possible[direction] = new int[] { 0 };
-        }
+        
     }
     public int[] GetPossible(int direction)
     {
         return Possible[direction];
     }
+
+    public Quaternion GetRotation() => Quaternion.Euler(0, Rotation * 90, 0);
+    public GameObject GetGameObjectPrototype() => Schema.gameObject;
+    
 }
 

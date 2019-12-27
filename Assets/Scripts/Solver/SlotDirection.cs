@@ -29,9 +29,9 @@ static class SlotDirection
 
     public static readonly int[][] Rotation = {
         new [] { UP, DOWN, LEFT, RIGHT, BACK, FORWARD }, // 0 = 0 degrees
-        new [] { UP, DOWN, FORWARD, BACK, LEFT, RIGHT }, // 1 = 90 degrees
-        new [] { UP, DOWN, LEFT, RIGHT, BACK, FORWARD }, // 2 = 180 degrees
-        new [] { UP, DOWN, LEFT, RIGHT, BACK, FORWARD }, // 3 = 270 degrees
+        new [] { UP, DOWN, BACK, FORWARD, RIGHT, LEFT}, // 1 = 90 degrees
+        new [] { UP, DOWN, RIGHT, LEFT, FORWARD,  BACK}, // 2 = 180 degrees
+        new [] { UP, DOWN, FORWARD, BACK, LEFT, RIGHT }, // 3 = 270 degrees
     };
 }
 
