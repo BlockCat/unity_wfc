@@ -6,42 +6,57 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 [CustomEditor(typeof(WFC))]
+[CanEditMultipleObjects]
 public class WFCEditor : Editor
 {
 	private WFC wfc;
+
+	private SerializedProperty p_UpConnectors;
+	private SerializedProperty p_DownConnectors;
+	private SerializedProperty p_HorizontalConnectors;
+
 	public void OnEnable()
 	{
 		wfc = (WFC)target;
+		p_UpConnectors = serializedObject.FindProperty("UpConnector");
+		p_DownConnectors = serializedObject.FindProperty("DownConnector");
+		p_HorizontalConnectors = serializedObject.FindProperty("HorizontalConnector");
 	}
 	public override void OnInspectorGUI()
 	{
+		EditorGUI.BeginChangeCheck();
 		GUILayout.Label("Map settings");
 		wfc.Size = EditorGUILayout.Vector3IntField("Map size", wfc.Size);
 		wfc.SlotSize = EditorGUILayout.IntField("Slot size", wfc.SlotSize);
 
-		wfc.UpConnector = EditorGUILayout.IntField("Upper connectors", wfc.UpConnector);
-		wfc.DownConnector = EditorGUILayout.IntField("Down connectors", wfc.DownConnector);
-		wfc.HorizontalConnector = EditorGUILayout.IntField("Horizontal connectors", wfc.HorizontalConnector);
+
+		EditorGUILayout.BeginFoldoutHeaderGroup(true, "Up");
+		p_UpConnectors.arraySize = EditorGUILayout.IntField("size", p_UpConnectors.arraySize);
+		for (int i = 0; i < p_UpConnectors.arraySize; i++)
+		{
+			EditorGUILayout.PropertyField(p_UpConnectors.GetArrayElementAtIndex(i), new GUIContent("connector"));
+		}
+		EditorGUILayout.EndFoldoutHeaderGroup();
+		EditorGUILayout.BeginFoldoutHeaderGroup(true, "Down");
+		p_DownConnectors.arraySize = EditorGUILayout.IntField("Down size", p_DownConnectors.arraySize);
+		for (int i = 0; i < p_DownConnectors.arraySize; i++)
+		{
+			EditorGUILayout.PropertyField(p_DownConnectors.GetArrayElementAtIndex(i), new GUIContent("connector"));
+		}
+		EditorGUILayout.EndFoldoutHeaderGroup();
+		EditorGUILayout.BeginFoldoutHeaderGroup(true, "Horizontal");
+		p_HorizontalConnectors.arraySize = EditorGUILayout.IntField("Down size", p_HorizontalConnectors.arraySize);
+		for (int i = 0; i < p_HorizontalConnectors.arraySize; i++)
+		{
+			EditorGUILayout.PropertyField(p_HorizontalConnectors.GetArrayElementAtIndex(i), new GUIContent("connector"));
+		}
+		EditorGUILayout.EndFoldoutHeaderGroup();
 
 		GUILayout.Label("Prototypes");
 		wfc.SceneLoader = (GameObject)EditorGUILayout.ObjectField("Prototypes", wfc.SceneLoader, typeof(GameObject), false);
 		if (GUILayout.Button("Reload Prototypes"))
 		{
 			LoadPrototypes();
-		}
-
-		GUILayout.Label("Debug item");
-		wfc.debug_spawner = (GameObject)EditorGUILayout.ObjectField("ds2", wfc.debug_spawner, typeof(GameObject), true);
-		wfc.debug_spawner_2 = (GameObject)EditorGUILayout.ObjectField("ds1", wfc.debug_spawner_2, typeof(GameObject), true);
-
-		wfc.DrawDebug = EditorGUILayout.Toggle("Debug", wfc.DrawDebug);
-		if (wfc.DrawDebug)
-		{
-			wfc.DebugSpeed = EditorGUILayout.LongField("Debug speed", wfc.DebugSpeed);
-		}
-		else
-		{
-			wfc.DebugSpeed = 0;
 		}
 
 		if (GUILayout.Button("Generate map"))
@@ -51,25 +66,37 @@ public class WFCEditor : Editor
 			Debug.Log("Start generate map");
 			wfc.StartGeneration();
 		}
+
+		if (EditorGUI.EndChangeCheck())
+		{
+			serializedObject.ApplyModifiedProperties();
+		}
 	}
 
 	private void LoadPrototypes()
 	{
 		var schemas = wfc.SceneLoader.GetComponentsInChildren<WFCSchema>();
-		var mapping = new Dictionary<WFCSchema, List<WFCPrototype>>();
 		var prototypes = new List<WFCPrototype>();
 		var counter = 0;
 		// Check all directions;
 		foreach (var schema in schemas)
 		{
-			List<WFCPrototype> rotations = new List<WFCPrototype>();
-			for (int i = 0; i < 4; i++)
+			if (schema.gameObject.activeSelf)
 			{
-				var prototype = new WFCPrototype(counter++, i, schema);
-				prototypes.Add(prototype);
-				rotations.Add(prototype);
+
+				for (int i = 0; i < 4; i++)
+				{
+					var prototype = new WFCPrototype(counter++, i, false, schema);
+					prototypes.Add(prototype);
+					if (schema.AllowFlipped)
+					{
+						var flippedPrototype = new WFCPrototype(counter++, i, true, schema);
+						prototypes.Add(flippedPrototype);
+					}
+				}
 			}
-			mapping.Add(schema, rotations);
+
+
 		}
 
 		// rotation 0 = 0 (forward becomes forward)
@@ -79,16 +106,6 @@ public class WFCEditor : Editor
 
 		foreach (var prototype in prototypes)
 		{
-			// Check foreach rotated prototype if connectors match
-			// Handle up
-			var transformed = SlotDirection.Rotation[prototype.Rotation];
-			var possibleUp = prototype.Schema.connections[SlotDirection.UP].Select(x => x.Connector);
-			var possibleDown = prototype.Schema.connections[SlotDirection.DOWN].Select(x => x.Connector);
-			var possibleLeft = prototype.Schema.connections[transformed[SlotDirection.LEFT]];
-			var possibleRight = prototype.Schema.connections[transformed[SlotDirection.RIGHT]];
-			var possibleForward = prototype.Schema.connections[transformed[SlotDirection.FORWARD]];
-			var possibleBack = prototype.Schema.connections[transformed[SlotDirection.BACK]];
-
 			var directionCollection = new[]
 			{
 				new List<int>(),
@@ -98,52 +115,37 @@ public class WFCEditor : Editor
 				new List<int>(),
 				new List<int>(),
 			};
-			//  f 
-			// l0r
-			//  b
-			//  l 
-			// b1f
-			//  r			
+
+			void handlePrototype(WFCPrototype me, WFCPrototype other, int direction)
+			{
+				var m = me.GetSchemaConnectors(direction);
+				var o = other.GetSchemaConnectors(SlotDirection.CounterDirections[direction]);
+				if (m.Any(a => o.Any(b => SchemaConnection.Connects(a, b))))
+				{
+					directionCollection[direction].Add(other.Id);
+				}
+			}
+
 			foreach (var o_prototype in prototypes)
 			{
-				var o_transformed = SlotDirection.Rotation[(o_prototype.Rotation)];
-				if (o_prototype.Rotation == 1)
-				{
-					Debug.Assert(o_transformed[SlotDirection.FORWARD] == SlotDirection.LEFT, $"Wrong Direction: f {o_transformed[SlotDirection.FORWARD]} instead of {SlotDirection.LEFT}");
-				}
-				
-				var ou = o_prototype.Schema.connections[SlotDirection.UP].Select(x => x.Connector);
-				var od = o_prototype.Schema.connections[SlotDirection.DOWN].Select(x => x.Connector);
-				var ol = o_prototype.Schema.connections[o_transformed[SlotDirection.LEFT]];
-				var or = o_prototype.Schema.connections[o_transformed[SlotDirection.RIGHT]];
-				var of = o_prototype.Schema.connections[o_transformed[SlotDirection.FORWARD]];
-				var ob = o_prototype.Schema.connections[o_transformed[SlotDirection.BACK]];
+				var mu = prototype.GetSchemaConnectors(SlotDirection.UP);
+				var md = prototype.GetSchemaConnectors(SlotDirection.DOWN);
+				var ou = o_prototype.GetSchemaConnectors(SlotDirection.UP);
+				var od = o_prototype.GetSchemaConnectors(SlotDirection.DOWN);
 
-				if (possibleUp.Intersect(od).Any())
+				if (mu.Select(x => x.Connector).Intersect(od.Select(x => x.Connector)).Any())
 				{
-					directionCollection[SlotDirection.UP].Add(o_prototype.Id);					
+					directionCollection[SlotDirection.UP].Add(o_prototype.Id);
 				}
-				if (possibleDown.Intersect(ou).Any())
+				if (md.Select(x => x.Connector).Intersect(ou.Select(x => x.Connector)).Any())
 				{
 					directionCollection[SlotDirection.DOWN].Add(o_prototype.Id);
 				}
 
-				if (possibleLeft.Any(a => or.Any(b => SchemaConnection.Connects(a, b))))
-				{
-					directionCollection[SlotDirection.LEFT].Add(o_prototype.Id);
-				}
-				if (possibleRight.Any(a => ol.Any(b => SchemaConnection.Connects(a, b))))
-				{
-					directionCollection[SlotDirection.RIGHT].Add(o_prototype.Id);
-				}
-				if (possibleForward.Any(a => ob.Any(b => SchemaConnection.Connects(a, b))))
-				{
-					directionCollection[SlotDirection.FORWARD].Add(o_prototype.Id);
-				}
-				if (possibleBack.Any(a => of.Any(b => SchemaConnection.Connects(a, b))))
-				{
-					directionCollection[SlotDirection.BACK].Add(o_prototype.Id);
-				}
+				handlePrototype(prototype, o_prototype, SlotDirection.LEFT);
+				handlePrototype(prototype, o_prototype, SlotDirection.RIGHT);
+				handlePrototype(prototype, o_prototype, SlotDirection.FORWARD);
+				handlePrototype(prototype, o_prototype, SlotDirection.BACK);
 			}
 			foreach (var direction in SlotDirection.Directions)
 			{

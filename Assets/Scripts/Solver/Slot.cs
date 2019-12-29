@@ -27,7 +27,7 @@ public class Slot
 {
 	public Domain Domain => DomainStack.Peek();
 	public int DomainSize => Domain.Range.Count;
-	public bool IsInstantiated => Domain.Range.Count == 1;
+	public bool IsInstantiated => DomainSize == 1;
 
 	private Stack<Domain> DomainStack;
 	public int Value {
@@ -53,20 +53,30 @@ public class Slot
 			new List<Slot>(),
 			new List<Slot>()
 		};
+		Debug.Assert(this.DomainSize > 0, "Domain size is 0");
 	}
 
 	public void SetLockedDirection(int direction, int[] possibleConnectors, WFCPrototype[] prototypes)
 	{
 		Debug.Assert(this.DomainStack.Count <= 1, $"Domainstack is larger than 1, cannot set direction when propagating: {this.DomainStack.Count}");
+		Debug.Assert(this.DomainSize > 0, "Domain size is 0");
+
+		if (possibleConnectors.Length == 0)
+		{
+			return;
+		}
 
 		// This domain should just be prototypes whose connector is good
-		var result = this.LessenDomain(-1, prototypes.Where(p =>
-		{
-			var o_transformed = SlotDirection.Rotation[(p.Rotation)];
-			return p.Schema.connections[o_transformed[direction]].Any(x => possibleConnectors.Contains(x.Connector));
-		}).Select(p => p.Id));
 
-		if (result == PropagationState.Violated)
+		var neighbours = prototypes.Where(p =>
+		{
+			return p.GetSchemaConnectors(direction).Any(x => possibleConnectors.Contains(x.Connector));
+		}).ToList();
+
+		var result = this.LessenDomain(-1, neighbours.Select(p => p.Id));
+
+		// Debug.Log($"Locking: {DomainSize} left");
+		if (result == PropagationState.Violated || DomainSize == 0)
 		{
 			throw new Exception($"Failed to add lock: {direction}");
 		}
@@ -74,6 +84,7 @@ public class Slot
 
 	internal void Instantiate(int depth, System.Random random)
 	{
+		Debug.Assert(DomainSize > 0, "Domain size is 0 whilst trying to instantiate");
 		if (!IsInstantiated)
 		{
 			var oldDomain = new List<int>(this.Domain.Range);
@@ -89,16 +100,17 @@ public class Slot
 	}
 	public PropagationState LessenDomain(int depth, HashSet<int> possibles)
 	{
-
+		Debug.Assert(DomainSize > 0, "Domain size is 0 whilst trying to lessen domain");
 		if (Domain.Depth == depth)
 		{
-			int oldCount = Domain.Range.Count;
+			int oldCount = DomainSize;
 			Domain.Range.IntersectWith(possibles);
-			if (Domain.Range.Count == 0)
+
+			if (DomainSize == 0)
 			{
 				return PropagationState.Violated;
 			}
-			if (oldCount == Domain.Range.Count)
+			if (oldCount == DomainSize)
 			{
 				return PropagationState.Unchanged;
 			}
@@ -113,12 +125,13 @@ public class Slot
 			return PropagationState.Violated;
 		}
 
-		if (lessened.Count == Domain.Range.Count)
+		if (lessened.Count == DomainSize)
 		{
 			return PropagationState.Unchanged;
 		}
 		Domain next = new Domain(depth, lessened);
 		DomainStack.Push(next);
+		Debug.Assert(DomainSize > 0, "Domain size is 0 whilst trying to finalize lessen domain");
 		return PropagationState.Propagated;
 	}
 
@@ -161,9 +174,13 @@ public class Slot
 			clone.Range.Remove(wrong);
 			DomainStack.Push(clone);
 		}
-
-		return (Domain.Range.Count == 0) ?
+		return (DomainSize == 0) ?
 			DomainOperationResult.EmptyDomain :
 			DomainOperationResult.FilledDomain;
+	}
+
+	public override string ToString()
+	{
+		return $"Slot: {DomainSize}, s: {DomainStack.Count}";
 	}
 }

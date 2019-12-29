@@ -16,6 +16,7 @@ static class SlotDirection
 
 	public static readonly int[] Directions =  { UP, DOWN, LEFT, RIGHT, BACK, FORWARD };
     public static readonly int[] CounterDirections = { DOWN, UP, RIGHT, LEFT, FORWARD, BACK };
+    public static readonly int[] Flipped = { UP, DOWN, LEFT, RIGHT, FORWARD, BACK};
 
     public static readonly string[] Names = { "Up", "Down", "Left", "Right", "Back", "Forward" };
     public static readonly Vector3[] Transforms = {

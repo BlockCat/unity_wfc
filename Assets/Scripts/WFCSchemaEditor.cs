@@ -32,6 +32,9 @@ public class WFCSchemaEditor : Editor
 		EditorGUI.BeginChangeCheck();
 		GUIStyle s = new GUIStyle();
 		s.alignment = TextAnchor.MiddleLeft;
+
+		prototype.AllowFlipped = EditorGUILayout.Toggle("Allow flippable", prototype.AllowFlipped);
+
 		foreach (var direction in SlotDirection.Directions)
 		{
 

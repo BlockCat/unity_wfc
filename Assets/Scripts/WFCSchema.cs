@@ -5,10 +5,13 @@ using System.Linq;
 using UnityEditor;
 using UnityEngine;
 
+[AddComponentMenu("WFC/Schema")]
 public class WFCSchema : MonoBehaviour
 {
 	// Start is called before the first frame update
 	public bool[] editorCollapsed = new bool[6];
+
+	public bool AllowFlipped = false;
 
 
 	public SchemaConnection[][] connections => new[] { up, down, left, right, back, forward };
